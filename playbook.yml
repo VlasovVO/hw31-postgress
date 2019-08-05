@@ -1,0 +1,35 @@
+---
+- hosts: master
+  become: true
+  tasks:
+  - copy:
+      src: pg_hba.conf
+      dest: /var/lib/pgsql/11/data/pg_hba.conf
+  - copy:
+      src: postgresql.conf
+      dest: /var/lib/pgsql/11/data/postgresql.conf
+  - systemd:
+      state: restarted
+      name: postgresql-11
+  - name: add user to pgql
+    become: true
+    become_user: postgres
+    postgresql_user:
+      name: repuser
+      password: secretPassword
+      role_attr_flags: replication
+      encrypted: yes
+      conn_limit: 2
+
+- hosts: slave
+  become: true
+  tasks:
+  - shell: rm -rf /var/lib/pgsql/11/data/*
+  - shell: export PGPASSWORD=secretPassword && pg_basebackup -h 192.168.255.10 -U repuser -D /var/lib/pgsql/11/data/ 2>&1
+  - copy:
+      src: recovery.conf
+      dest: /var/lib/pgsql/11/data/recovery.conf
+  - shell: chown -R postgres:postgres /var/lib/pgsql/11/data/
+  - systemd:
+      state: restarted
+      name: postgresql-11
